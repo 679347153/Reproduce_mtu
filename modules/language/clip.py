@@ -10,7 +10,7 @@ from modules.grounding.query_encoder import SelfAttentionLayer
 
 @LANGUAGE_REGISTRY.register()
 class CLIPLanguageEncoder(nn.Module):
-    def __init__(self, cfg, weights="openai/clip-vit-large-patch14", output_dim=768, freeze_backbone=True, use_projection=False, projection_type='mlp', num_projection_layers=1, dropout=0.1):
+    def __init__(self, cfg, weights="/home/ma-user/work/zhangWei/mtu3d/data/trans/clip-vit-large-patch14", output_dim=768, freeze_backbone=True, use_projection=False, projection_type='mlp', num_projection_layers=1, dropout=0.1):
         super().__init__()
         self.context = torch.no_grad if freeze_backbone else nullcontext
         self.model = CLIPTextModelWithProjection.from_pretrained(weights)

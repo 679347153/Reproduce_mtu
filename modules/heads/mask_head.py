@@ -271,8 +271,11 @@ class OpenVocabHead(nn.Module):
 def save_scannet200_clip_features(path="./clip_scannet200.pth"):
     from data.datasets.constant import CLASS_LABELS_200
     from transformers import AutoTokenizer, CLIPTextModelWithProjection
-    model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-large-patch14")
-    tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+    # model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-large-patch14")
+    # tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+    local_clip_path = "/home/ma-user/work/zhangWei/mtu3d/data/trans/clip-vit-large-patch14"
+    model = CLIPTextModelWithProjection.from_pretrained(local_clip_path)
+    tokenizer = AutoTokenizer.from_pretrained(local_clip_path)
     inputs = tokenizer([lang for lang in CLASS_LABELS_200] + ['no object'], padding=True, return_tensors="pt")
     #inputs = tokenizer(['can sit', 'people can put book on', 'emit light', 'can watch', 'exit this room'] + ['no object'], padding=True, return_tensors="pt")
     outputs = model(**inputs)

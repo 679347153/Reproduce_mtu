@@ -443,7 +443,7 @@ class Mask3DSegLevel(BaseModel):
         self.filter_out_classes = cfg.eval.get("filter_out_classes", [0, 2])
         # 初始化tokenizer用于文本编码
         if self.test_prompt_scannet200 or self.test_prompt_replica:
-            self.tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+            self.tokenizer = AutoTokenizer.from_pretrained("/home/ma-user/work/zhangWei/mtu3d/data/trans/clip-vit-large-patch14")
 
     def prompt_encoder(self, data_dict):
         """

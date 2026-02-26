@@ -155,8 +155,9 @@ class PQ3DModel:
     def __init__(self, stage1_dir, stage2_dir, min_decision_num=None):
         # get four models, sam, dino, pq3d stage1, pq3d stage2
         # dino
-        processor = AutoImageProcessor.from_pretrained('facebook/dinov2-large')
-        model = AutoModel.from_pretrained('facebook/dinov2-large').cuda()
+        local_path = "/home/ma-user/work/zhangWei/mtu3d/data/trans/dinov2-large"  # 修改为你的本地路径
+        processor = AutoImageProcessor.from_pretrained(local_path)
+        model = AutoModel.from_pretrained(local_path).cuda()
         model.eval()
         img_backbone = [processor, model]
         self.image_backbone = img_backbone
@@ -185,7 +186,8 @@ class PQ3DModel:
         self.pq3d_stage2.load_state_dict(torch.load(os.path.join(stage2_dir, 'pytorch_model.bin'), map_location='cpu'), strict=False)
         self.pq3d_stage2.eval()
         self.pq3d_stage2.cuda()
-        self.tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+        
+        self.tokenizer = AutoTokenizer.from_pretrained("/home/ma-user/work/zhangWei/mtu3d/data/trans/clip-vit-large-patch14")
         # decision params
         self.frontier_selection_mode = 'model'
         self.min_decision_num = min_decision_num if min_decision_num is not None else 3

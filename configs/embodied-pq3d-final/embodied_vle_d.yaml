@@ -55,7 +55,7 @@ data:
     load_openvocab: True
     load_score: False
   
-  scene_verse_base: /home/ma-user/work/zhangWei/mtu3d/data/SceneVerse  #场景数据
+  scene_verse_base: /home/ma-user/work/zhangWei/mtu3d/data/  #场景数据
   embodied_base: /home/ma-user/work/zhangWei/mtu3d/data/embodied_scan    #stage1
   embodied_feat: /home/ma-user/work/zhangWei/mtu3d/data/embodied_scan_stage2_feat
   embodied_vle: /home/ma-user/work/zhangWei/mtu3d/data/embodied_scan_vle_data
@@ -119,8 +119,7 @@ data_wrapper:
   train: EmbodiedVLEWrapper
   val: ${data_wrapper.train}
   test: ${data_wrapper.train}
-  tokenizer: openai/clip-vit-large-patch14
-
+  tokenizer: /home/ma-user/work/zhangWei/mtu3d/data/trans/clip-vit-large-patch14
 # Training details
 trainer: EmbodiedStage2Trainer
 

@@ -56,12 +56,12 @@ class EmbodiedScanBase(Dataset, ABC):
         self.cat2int = {w: i for i, w in enumerate(self.int2cat)}
         self.label_converter = LabelConverter(os.path.join(self.base_dir,
                                             "ScanNet/annotations/meta_data/scannetv2-labels.combined.tsv"))
-        self.scannet_607_cat_to_text_embed = torch.load(os.path.join(self.embodied_base_dir, "ScanNet", "scannet_sem_text_feature.pth"))
+        self.scannet_607_cat_to_text_embed = torch.load(os.path.join(self.embodied_base_dir, "ScanNet", "scannet_sem_text_feature.pth"),weights_only=False)
         # label converter for hm3d
         hm3d_sem_category_mapping = np.loadtxt(os.path.join(self.embodied_base_dir, "HM3D", "hm3dsem_category_mappings.tsv"), dtype=str, delimiter="\t", encoding='utf-8')
         self.hm3d_raw_to_scannet607 = convert_gpt4
         self.hm3d_raw_to_cat = {hm3d_sem_category_mapping[i, 0]: hm3d_sem_category_mapping[i, 1] for i in range(1, hm3d_sem_category_mapping.shape[0])}
-        self.hm3d_cat_to_text_embed = torch.load(os.path.join(self.embodied_base_dir, "HM3D", "hm3d_sem_text_feature.pth"))
+        self.hm3d_cat_to_text_embed = torch.load(os.path.join(self.embodied_base_dir, "HM3D", "hm3d_sem_text_feature.pth"),weights_only=False)
          
     def __len__(self):
         return len(self.lang_data)
@@ -152,7 +152,7 @@ class EmbodiedScanBase(Dataset, ABC):
                     sub_frame_list.append(sub_frame_id + ".bin")
         # get inst_to_label
         if self.dataset_name == 'ScanNet':
-            inst_to_label = torch.load(os.path.join(self.base_dir, 'ScanNet', 'scan_data/instance_id_to_label', f'{scan_id}.pth')) 
+            inst_to_label = torch.load(os.path.join(self.base_dir, 'ScanNet', 'scan_data/instance_id_to_label', f'{scan_id}.pth'),weights_only=False)
             inst_to_text_label = inst_to_label.copy()
         else:
             # k - 1 because hm3d instance id starts from 1, 0 is no object

@@ -6,7 +6,7 @@ from transformers import AutoTokenizer, LlamaForCausalLM
 from modules.build import HEADS_REGISTRY
 @HEADS_REGISTRY.register()
 class T5(nn.Module):
-    def __init__(self, cfg, variant='t5-small', input_size=768, use_projection=True, **kwargs):
+    def __init__(self, cfg, variant='/home/ma-user/work/zhangWei/mtu3d/data/trans/t5-small', input_size=768, use_projection=True, **kwargs):
         super().__init__()
         self.model = T5ForConditionalGeneration.from_pretrained(variant)
         self.model.config.update(kwargs)
@@ -31,7 +31,7 @@ class T5(nn.Module):
 
 @HEADS_REGISTRY.register()
 class Llama2(nn.Module):
-    def __init__(self, cfg, variant='meta-llama/Llama-2-7b-hf', input_size=768, use_projection=True, **kwargs):
+    def __init__(self, cfg, variant='/home/ma-user/work/zhangWei/mtu3d/data/trans/Llama-2-7b-hf', input_size=768, use_projection=True, **kwargs):
         super().__init__()
         self.model = LlamaForCausalLM.from_pretrained(variant)
         self.model.config.update(kwargs)

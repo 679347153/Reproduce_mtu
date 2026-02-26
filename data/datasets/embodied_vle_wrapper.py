@@ -20,6 +20,8 @@ class EmbodiedVLEWrapper(Dataset):
         self.dataset_name = dataset.__class__.__name__
         tokenizer_name = getattr(cfg.data_wrapper, 'tokenizer', 'bert-base-uncased')
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # from modules.model_config import MODEL_PATHS
+        # tokenizer = AutoTokenizer.from_pretrained(MODEL_PATHS["bert-base-uncased"])
         self.task_id = dataset2task_id[self.dataset_name]
     
     def __len__(self):

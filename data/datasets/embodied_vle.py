@@ -61,7 +61,7 @@ class EmbodiedVLEBase(Dataset, ABC):
         self.hm3d_to_scannet607 = convert_gpt4
         hm3d_sem_category_mapping = np.loadtxt(os.path.join(self.embodied_base_dir, 'HM3D', "hm3dsem_category_mappings.tsv"), dtype=str, delimiter="\t")
         self.hm3d_raw_to_cat = {hm3d_sem_category_mapping[i, 0]: hm3d_sem_category_mapping[i, 1] for i in range(1, hm3d_sem_category_mapping.shape[0])}
-        self.hm3d_cat_to_text_embed = torch.load(os.path.join(self.embodied_base_dir, 'HM3D', "hm3d_sem_text_feature.pth"))
+        self.hm3d_cat_to_text_embed = torch.load(os.path.join(self.embodied_base_dir, 'HM3D', "hm3d_sem_text_feature.pth") ,weights_only=False)
     
     def __len__(self):
         return len(self.lang_data) * self.train_duplicate
@@ -138,7 +138,7 @@ class EmbodiedVLEBase(Dataset, ABC):
         # load inst to label
         if self.dataset_name == 'HM3D':
             scan_id_hm3d = scan_id
-            inst_to_label = torch.load(os.path.join(self.embodied_base_dir, 'HM3D', 'instance_id_to_label', f'{scan_id_hm3d}_00.pth')) 
+            inst_to_label = torch.load(os.path.join(self.embodied_base_dir, 'HM3D', 'instance_id_to_label', f'{scan_id_hm3d}_00.pth'),weights_only=False)
             inst_to_hm3d_label = {k - 1: self.hm3d_raw_to_cat[v] if v in self.hm3d_raw_to_cat.keys() else v for k,v in inst_to_label.items()}
             # change inst to label to scannet category
             inst_to_label = {k - 1: self.hm3d_to_scannet607[v] if v in self.hm3d_to_scannet607.keys() else 'object' for k, v in inst_to_label.items()}
@@ -157,7 +157,7 @@ class EmbodiedVLEBase(Dataset, ABC):
         query_feat_dict = defaultdict(lambda : defaultdict(list))
         for sub_scan_id in sub_scan_ids:
             feat_path = os.path.join(self.embodided_feat_dir, self.dataset_name, sub_scan_id)
-            feat = torch.load(feat_path)
+            feat = torch.load(feat_path,weights_only=False)
             for k, v in feat.items(): # k is object id 
                 query_feat_dict[k]['object_box'].extend(v['object_box'])
                 query_feat_dict[k]['object_feat'].extend(v['object_feat'])
@@ -863,10 +863,10 @@ class EmbodiedVLEGoat(EmbodiedVLEBase):
         for scan_id in self.scan_ids:
             if self.split == 'train':
                 if os.path.exists(os.path.join(image_feat_dir, 'train', f'{scan_id}.pt')):
-                    image_feat = torch.load(os.path.join(image_feat_dir, 'train', f'{scan_id}.pt'), map_location='cpu')
+                    image_feat = torch.load(os.path.join(image_feat_dir, 'train', f'{scan_id}.pt'), map_location='cpu',weights_only=False)
             else:
                 if os.path.exists(os.path.join(image_feat_dir, 'val_seen', f'{scan_id}.pt')):
-                    image_feat = torch.load(os.path.join(image_feat_dir, 'val_seen', f'{scan_id}.pt'), map_location='cpu')
+                    image_feat = torch.load(os.path.join(image_feat_dir, 'val_seen', f'{scan_id}.pt'), map_location='cpu',weights_only=False)
             image_feat_dict[scan_id] = image_feat
         self.image_feat_dict = image_feat_dict
 
