@@ -1,0 +1,21 @@
+articulated: False
+agent_object: null
+agent_radius: 0.17
+agent_height: 1.41
+sensor_front_bias: 0.0
+hfov: 42
+sensors:
+- rgb_1st
+- semantic_1st
+action_space:
+- no_op
+- move_forward
+- move_backward
+- turn_left
+- turn_right
+- look_up
+- look_down
+step_size: 0.25
+turn_angle: 30
+tilt_angle: 30
+vision: False

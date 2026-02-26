@@ -1,0 +1,13 @@
+width: 90
+height: 160
+default_agent: 0
+allow_sliding: false
+seed: 1
+scene_dataset_config_file: 'data/hm3d/hm3d_annotated_basis.scene_dataset_config.json'
+scene: null
+default_agent_navmesh: true
+navmesh_include_static_objects: true
+grab_and_release_distance: 2.0
+fps: 60
+agent_max_climb: 0.1
+cell_height: 0.05

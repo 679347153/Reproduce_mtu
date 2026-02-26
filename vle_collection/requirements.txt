@@ -1,0 +1,10 @@
+opencv-python
+omegaconf
+numba
+numpy==1.23.5
+tqdm
+numpy-quaternion
+attrs
+scipy
+scikit-learn
+gym-notices==0.0.8

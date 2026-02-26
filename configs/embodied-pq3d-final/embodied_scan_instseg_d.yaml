@@ -1,0 +1,373 @@
+# ================================================================================
+# memories 参数详解
+# ================================================================================
+# 
+# 核心定义：
+#   memories: [voxel, mv]  # 定义模型使用的多模态记忆系统
+# 
+# 组成与功能：
+#   - voxel (体素记忆): 3D空间几何与结构信息
+#     * 编码器: PCDMask3DSegLevelEncoder
+#     * 特征: 空间位置、几何形状、场景结构
+#   
+#   - mv (多视图记忆): 2D视角外观与纹理信息  
+#     * 编码器: ObjectEncoder
+#     * 特征: 视觉外观、颜色纹理、语义信息
+# 
+# 工作流程：
+#   1. 编码阶段: 分别提取体素和2D图像特征
+#   2. 融合阶段: QueryMaskEncoder 以查询为中心交互融合两种记忆
+#   3. 解码阶段: mask_head 和 openvocab_head 生成分割预测
+# 
+# 设计理念：
+#   - 互补融合: 体素的精确几何 + 图像的丰富纹理
+#   - 查询驱动: 动态检索记忆中相关信息进行推理
+#   - 实例感知: 同时区分语义类别和分离个体实例
+# 
+# 优势：
+#   提升复杂3D场景中实例分割的准确性与鲁棒性
+# ================================================================================
+
+
+# ================================================================================
+# Embodied Scan 实例分割配置文件（深度分析版）
+#
+# 此配置定义 EmbodiedPQ3DInstSegModel 的训练/推理超参，该模型针对具身 3D
+# 场景中的实例分割（InstSeg）任务，通过 memories 多模态记忆系统实现体素与
+# 多视图特征的高效融合。
+#
+#
+# ========== MEMORIES 多模态记忆系统（核心创新） ==========
+#
+# memories 是此配置的核心创新，定义了模型存储与处理的多模态特征"记忆"：
+#
+#   memories: [voxel, mv]
+#
+# 含义：
+#   - voxel：3D 点云的体素化表示及其多尺度特征（从 PCDMask3DSegLevelEncoder）
+#   - mv（multi-view）：多视图图像特征（从 ObjectEncoder）
+#
+# 核心作用：
+#   1. 统一定义模型支持的输入模态，避免硬编码
+#   2. 在统一编码器中自动适配这些模态进行注意力融合
+#   3. 在任务头中指导特征匹配与预测生成
+#   4. 支持灵活扩展：可轻松增加或移除模态（如加入文本特征）
+#
+# 数据流向：
+#   输入数据（point cloud + images）
+#      |
+#      +→ voxel_encoder ----→ voxel_features (memories[voxel])
+#      |
+#      +→ mv_encoder -------→ mv_features (memories[mv])
+#      |
+#      v
+#   unified_encoder（通过 cross-attention 融合 query 与所有 memories）
+#      |
+#      v
+#   mask_head / openvocab_head（在融合特征基础上进行预测）
+#      |
+#      v
+#   实例掩码与开放词汇预测
+#
+#
+# ========== 文件结构说明 ========== 
+#
+#   - 顶层：实验相关（name / base_dir / seed / mode / logger 等）
+#   - data：定义数据集、加载选项与实例分割特定超参（包括 voxel_size、query 数等）
+#   - dataloader：批大小与数据加载线程数
+#   - task：指定任务类型（InstSeg）与数据包装器
+#   - trainer：指定训练器（EmbodiedStage1Trainer）
+#   - solver：优化器、学习率调度与训练轮次
+#   - eval：评估器名称、忽略类别、评估规则
+#   - model：模型架构（memories、编码器、统一编码器、任务头、损失）
+#
+#
+# ========== 主要功能与关键参数 ==========
+#
+#   1. 多数据集联合训练：HM3D、ScanNet 实例分割数据
+#   2. 多模态融合：通过 memories 系统整合体素与多视图
+#   3. 体素编码：PCDMask3DSegLevelEncoder（多尺度提取、FPN 输出）
+#   4. 多视图编码：ObjectEncoder（视图特征投影与对齐）
+#   5. 统一融合：QueryMaskEncoder（注意力机制、自适应记忆融合）
+#   6. 实例预测：mask_head（分割）+ openvocab_head（开放词汇分类）
+#   7. 监督学习：EmbodiedScanInstSegLoss（掩码匹配、分类、边界框等）
+#
+# ================================================================================
+
+# Experiment general info
+name: "Embodied-PQ3D"
+base_dir: "/home/ma-user/work/zhangWei/mtu3d/record/mtu3d/output"
+exp_dir: ""
+note: ""
+naming_keywords: ["note", "time"]
+
+rng_seed: 42
+num_gpu: 8
+mode: "train"
+
+
+resume: False
+pretrain_ckpt_path: ''
+
+debug:
+  flag: False
+  debug_size: 10
+
+logger:
+  name: wandb
+  entity: optimus-prime-3dvl
+  autoname: True
+
+# -------------------------
+# 数据集相关（data）
+# -------------------------
+# 说明：指定训练/验证/测试用的数据集名称、加载选项和路径。
+#       实例分割特定选项（instseg_options）包含类别数、查询采样策略等。
+# -------------------------
+# dataset details
+data:
+  train: ['EmbodiedScanInstSegHM3D', 'EmbodiedScanInstSegScanNet']
+  val: ['EmbodiedScanInstSegScanNet']
+  test: ['EmbodiedScanInstSegScanNet']
+
+  load_scan_options:
+    load_pc_info: True
+    load_segment_info: True
+    load_image_segment_feat: True
+    load_global_pc: True
+  
+  instseg_options:
+    num_labels: 200
+    ignore_label: -100
+    filter_out_classes: [0, 2, 35] # filter out wall, floor, ceiling
+    voxel_size: 0.02
+    use_open_vocabulary: True
+    num_queries: 120
+    query_sample_strategy: 'random_segment'
+    image_augmentations_path: configs/instseg/augmentation/albumentations_aug.yaml
+    volume_augmentations_path: configs/instseg/augmentation/volumentations_aug.yaml
+    compute_local_box: True
+  
+  EmbodiedScanInstSegHM3D:
+    load_frame_interval: 10
+    val_load_scan_max_num: 10
+  
+  EmbodiedScanInstSegScanNet:
+    load_frame_interval: 1
+    val_load_scan_max_num: 10
+
+  scene_verse_base: /home/ma-user/work/zhangWei/mtu3d/data/  #场景数据
+  embodied_base: /home/ma-user/work/zhangWei/mtu3d/data/embodied_scan    #stage1
+
+# -------------------------
+# 数据加载器设置（dataloader）
+# -------------------------
+# 说明：batchsize 是每 GPU 的样本数，num_workers 为数据加载线程数。
+#       batchsize_eval 用于验证/测试阶段。
+# -------------------------
+# dataloader details
+dataloader:
+  # This is a per-gpu batchsize
+  batchsize: 8
+  batchsize_eval: 1
+  num_workers: 8
+
+# -------------------------
+# 任务与数据包装器（task / data_wrapper）
+# -------------------------
+# 说明：task 指定任务类型；data_wrapper 负责将原始数据转换为模型所需格式。
+# -------------------------
+task: InstSeg
+data_wrapper: EmbodiedScanInstSegDatasetWrapper
+
+# -------------------------
+# 训练器（trainer）
+# -------------------------
+# 说明：EmbodiedStage1Trainer 为专门的具身实例分割训练器。
+# -------------------------
+# Training details
+trainer: EmbodiedStage1Trainer
+
+# -------------------------
+# 求解器配置（solver）
+# -------------------------
+# 说明：定义优化器类型（AdamW）、学习率、梯度累积、训练轮次等参数。
+#       warmup_cosine 学习率调度会在前 100 步预热，之后按余弦衰减。
+# -------------------------
+solver:
+  gradient_accumulation_steps: 1
+  lr: 1.4e-4
+  grad_norm: 80
+  epochs: 60
+  epochs_per_eval: 60
+  optim:
+    name: AdamW
+    args:
+      betas: [0.9, 0.98]
+  sched:
+    name: warmup_cosine
+    args:
+      warmup_steps: 100
+
+# -------------------------
+# 评估配置（eval）
+# -------------------------
+# 说明：指定评估器名称、是否保存结果、过滤规则等。
+#       ignore_label 和 filter_out_classes 用于在评估时忽略特定类别。
+# -------------------------
+eval:
+  name: EmbodiedScanInstSegEvalEmpty
+  pass_kwargs: True
+  save: False
+  ignore_label: ${data.instseg_options.ignore_label}
+  filter_out_classes: [0, 2, 35]
+  compute_loss_eval: False
+
+# -------------------------
+# 模型配置（model）
+# -------------------------
+# 说明：定义模型架构、多模态 memories、特征维度、各尺度编码器与融合机制。
+#       memories=[voxel, mv] 是多模态记忆系统的核心：voxel 存储 3D 体素特征，
+#       mv 存储多视图图像特征。这两个记忆在统一编码器中通过交叉注意力进行融合。
+# -------------------------
+model:
+  name: EmbodiedPQ3DInstSegModel
+  
+  # ========== Memories 多模态记忆系统 ==========
+  # 定义模型支持的特征"记忆"模态：
+  #   - voxel: 3D 体素化点云特征（多尺度，来自 PCDMask3DSegLevelEncoder）
+  #   - mv: 多视图图像特征（来自 ObjectEncoder）
+  # 这两个记忆会被统一编码器（QueryMaskEncoder）用于交叉融合。
+  # 修改此列表可灵活调整模型的多模态组合。
+  memories: [voxel, mv]  # 支持扩展：[voxel, mv, text] 等
+  
+  # 统一特征维度（所有编码器输出与融合操作都使用此维度）
+  hidden_size: 768
+  # 使用 memory 特征初始化 query（而非随机初始化）
+  init_query_by_feat: True
+  # 向分割特征中添加几何信息（如中心点距离、法向量等）
+  add_geometry_to_segment: True
+  
+  # 对象位置编码（用于 query 与实例的空间关系表征）
+  obj_loc:
+    spatial_dim: 5         # 空间特征维度
+    dim_loc: 3            # 位置编码维度（x, y, z）
+    pairwise_rel_type: "center"  # 实例间关系：基于中心点
+
+  # ========== Voxel Encoder：体素化点云编码 ==========
+  # 处理输入的体素化 3D 点云，提取多尺度特征（memories[voxel]）
+  # 输入：稀疏体素坐标与特征
+  # 输出：多尺度体素特征（4 层，hlevels=[0,1,2,3]）+ FPN融合
+  voxel_encoder:
+    name: PCDMask3DSegLevelEncoder  # MinkowskiNet 或 Swin3D 为骨架
+    args:
+      backbone_kwargs:
+        config:
+          dialations: [ 1, 1, 1, 1 ]
+          conv1_kernel_size: 5
+          bn_momentum: 0.02
+        in_channels: 3          # 输入通道（xyz 坐标）
+        out_channels: 200       # 体素编码器输出通道
+        out_fpn: true           # 输出 FPN 金字塔特征
+      freeze_backbone: False    # backbone 可训练（仅投影层参与梯度更新）
+      hlevels: [0,1,2,3]       # 提取 4 个尺度的特征层
+      hidden_size: ${model.hidden_size}  # 投影到统一维度（768）
+      dropout: 0.1
+
+  # ========== Multi-View Encoder：多视图特征编码 ==========
+  # 处理多视图图像特征，将其投影到统一特征空间（memories[mv]）
+  # 输入：多视图图像特征（1024 维）
+  # 输出：投影后的多视图特征（hidden_size 维）
+  mv_encoder:
+    name: ObjectEncoder  # 多视图特征对齐与投影
+    args:
+      input_feat_size : 1024     # 多视图输入特征维度（如 CLIP/DINO）
+      hidden_size: ${model.hidden_size}  # 投影到统一维度（768）
+      use_projection: True       # 使用投影层进行维度对齐
+      use_cls_head: False        # 不使用分类头
+      dropout: 0.1
+
+  # ========== Unified Encoder：多模态融合编码 ==========
+  # 核心融合组件：整合所有 memories（voxel 与 mv），与 query 进行交叉注意力交互
+  # 输入：query + 所有 memories 特征
+  # 输出：融合后的 query 特征（已包含多模态上下文信息）
+  # 设计：使用 Transformer 自注意力（query 内部）与交叉注意力（query 与各 memory）
+  unified_encoder:
+    name: QueryMaskEncoder  # 使用 Transformer 进行交叉融合
+    args:
+      hidden_size: ${model.hidden_size}  # 统一特征维度（768）
+      num_attention_heads: 12  # 多头注意力头数
+      num_layers: 4           # Transformer 堆叠层数（4 个编码块）
+      spatial_selfattn: True  # 启用空间自注意力（query 与 query 之间的交互）
+      # memories 联动：从 model.memories 自动读取支持的模态列表
+      # 编码器会为每个 memory 创建交叉注意力路径
+      memories: ${model.memories}  # [voxel, mv] → 自动创建 2 条交叉注意力路径
+      structure: "parallel"   # 并行多路交叉注意力（而非串行）
+      use_self_mask: true     # 在自注意力中使用掩码（用于有效性过滤）
+      num_blocks: 1           # Transformer block 数量
+      
+      # ---- memories 融合机制解释 ----
+      # 此编码器对每个 memory 创建独立的交叉注意力层：
+      #   1. Query Self-Attention: query 与 query 的自交互
+      #   2. Query-Voxel Cross-Attention: query 查询 voxel memory
+      #   3. Query-MV Cross-Attention: query 查询 mv memory
+      # 多层堆叠后，query 融合了所有模态信息。 
+
+  # ========== Task Heads：任务输出头 ==========
+  # 在融合 query 的基础上进行两个预测任务
+  heads: [mask, openvocab]  # 支持的任务头列表
+  
+  # 掩码头：预测每个实例的分割掩码
+  mask_head:
+    name: "MaskHeadSegLevelWithBox"  # 分段级别掩码预测（包含边界框辅助）
+    args:
+      hidden_size: ${model.hidden_size}
+      num_targets: 201        # 目标类别数（200 个类 + 背景）
+      # memories_for_match 与 memories 保持一致：指导掩码匹配时的特征选择
+      # 在匹配阶段，会同时使用 voxel 和 mv 特征进行最优实例匹配
+      memories_for_match: ${model.memories}  # [voxel, mv]
+      filter_out_classes: []  # 过滤掉的类别（空则无过滤）
+  # 开放词汇头：基于融合特征进行开放词汇分类（零样本能力）
+  openvocab_head:
+    name: "OpenVocabHead"  # 与预训练的 CLIP/BERT 词汇对齐
+    args:
+      hidden_dim: ${model.hidden_size}  # 输入维度（768）
+      out_dim: 768                      # 输出维度（CLIP 特征维度）
+  
+  # ========== Loss：监督学习 ==========
+  # 联合多个损失函数进行监督
+  loss_list: [EmbodiedScanInstSegLoss]  # 主损失函数
+  vis_loss_list: []  # 可视化损失（通常为空）
+
+  # ========== 损失函数配置：EmbodiedScanInstSegLoss ==========
+  # 联合多个损失项进行监督学习，使用二部图匹配（Hungarian Matching）将预测与真值配对
+  # 
+  # 关键点：
+  #   1. Matcher 先根据 cost_* 参数进行最优二部图匹配，找到预测与真值的对应关系
+  #   2. 然后计算各项损失（class_loss, mask_loss, dice_loss, box_loss, open_vocab_loss）
+  #   3. 所有损失加权求和作为总损失，用于反向传播
+  EmbodiedScanInstSegLoss:
+    # ---- Matching Cost（用于 Hungarian Matcher） ----
+    # 这些参数定义匹配阶段如何衡量预测与真值的距离
+    cost_class: 0.5        # 分类成本权重（使用交叉熵或其他距离度量）
+    cost_score: 0.5        # 置信度成本（预测置信度 vs 真值置信度）
+    cost_mask: 1           # 掩码重叠成本（使用 binary cross-entropy）
+    cost_dice: 1           # Dice 系数成本（用于掩码相似度度量）
+    cost_box: 1            # 边界框回归成本（L1 距离或 IoU）
+    cost_open_vocab: 1     # 开放词汇成本（与真值标签的嵌入距离）
+    
+    # ---- Loss Weights（用于最终损失计算） ----
+    # score_weight: 两个分数（前景和背景）的权重比例
+    # [0.1, 1] 表示背景样本权重为 0.1，前景样本权重为 1
+    # 用于处理前景-背景类不平衡
+    score_weight: [0.1, 1]  # 背景权重 / 前景权重
+
+    # ---- Hungarian Matcher 配置 ----
+    # 使用二部图最优配对算法找到预测与真值的最优对应
+    # 在实际计算中，会根据所有 cost_* 参数加权求和计算匹配成本
+    matcher:
+      cost_score: 0.5       # 匹配阶段的置信度成本
+      cost_mask: 1.         # 匹配阶段的掩码成本
+      cost_dice: 1.         # 匹配阶段的 Dice 成本
+      # 注：这些参数与上面的成本参数冗余但可单独调参
+      # 匹配后，系统知道每个预测对应的真值，然后计算各项损失
