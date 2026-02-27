@@ -32,20 +32,46 @@ class BaseEvaluator():
                 self.eval_dict[key] = []
             self.eval_dict[key].append(metrics[key])
 
+    @staticmethod
+    def _cpu_scalar(x) -> torch.Tensor:
+        """Return a 0-dim CPU tensor for safe cross-rank aggregation."""
+        if isinstance(x, torch.Tensor):
+            x = x.detach()
+            if x.numel() != 1:
+                # Defensive: if a metric accidentally returns a vector, reduce it.
+                x = x.mean()
+            return x.to(device="cpu")
+        # Python number
+        return torch.tensor(x, device="cpu")
+
     def record(self):
         self.eval_dict = gather_dict(self.accelerator, self.eval_dict)
+
         for k, metrics in self.eval_dict.items():
             if not isinstance(metrics, list):
                 continue
             # metrics is a list of (value, count)
-            total_value = sum(x[0] for x in metrics)
-            total_count = sum(x[1] for x in metrics)
-            self.eval_dict[k] = total_value / max(total_count, 1)
+            values_cpu = []
+            counts_cpu = []
+            for x in metrics:
+                if not (isinstance(x, (tuple, list)) and len(x) >= 2):
+                    continue
+                values_cpu.append(self._cpu_scalar(x[0]))
+                counts_cpu.append(self._cpu_scalar(x[1]))
+
+            if len(values_cpu) == 0:
+                continue
+
+            total_value = torch.stack(values_cpu).sum()
+            total_count = torch.stack(counts_cpu).sum()
+
+            denom = max(float(total_count.item()), 1.0)
+            self.eval_dict[k] = float(total_value.item()) / denom
 
         if self.save and self.accelerator.is_main_process:
             with (self.save_dir / "results.json").open("w") as f:
                 json.dump(self.eval_results, f, indent=4)
-        
+
         self.eval_dict['target_metric'] = self.eval_dict[self.target_metric]
         if self.eval_dict["target_metric"] > self.best_result:
             is_best = True
